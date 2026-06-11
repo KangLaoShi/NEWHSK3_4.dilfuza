@@ -1,0 +1,587 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>汉语语法交互学习应用 (Xitoy tili grammatikasi)</title>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- React & ReactDOM -->
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    
+    <!-- Babel for JSX -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+    <style>
+        /* Custom animations */
+        @keyframes dash {
+            to {
+                stroke-dashoffset: -20;
+            }
+        }
+        .animate-dash {
+            animation: dash 1s linear infinite;
+        }
+    </style>
+</head>
+<body class="bg-slate-50 text-slate-800">
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect } = React;
+
+        // --- Icons (SVG Components) ---
+        // 内置图标以确保无需外部依赖即可运行
+        const BookOpen = ({ size = 24, className = "" }) => (
+            <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>
+        );
+        const CheckCircle = ({ size = 24, className = "" }) => (
+            <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+        );
+        const XCircle = ({ size = 24, className = "" }) => (
+            <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
+        );
+        const RefreshCw = ({ size = 24, className = "" }) => (
+            <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/></svg>
+        );
+        const Layout = ({ size = 24, className = "" }) => (
+            <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="21" x2="9" y2="9"/></svg>
+        );
+        const MousePointer2 = ({ size = 24, className = "" }) => (
+            <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="m12 6.5 7.6 12.3c.7 1.1-.3 2.5-1.6 2.2l-6-1.5-6 1.5c-1.3.3-2.3-1.1-1.6-2.2z"/></svg>
+        );
+        const GitMerge = ({ size = 24, className = "" }) => (
+            <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><circle cx="18" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><path d="M6 21V9a9 9 0 0 0 9 9"/></svg>
+        );
+
+        // --- 数据与常量 (Data & Constants) ---
+
+        const GRAMMAR_TERMS = {
+            subject: { cn: "主语", uz: "Ega", color: "#3B82F6" }, // Blue
+            predicate: { cn: "谓语(动词)", uz: "Kesim (Fe'l)", color: "#EF4444" }, // Red
+            object: { cn: "宾语", uz: "To'ldiruvchi", color: "#10B981" }, // Green
+            particle: { cn: "助词(得)", uz: "Yordamchi (de)", color: "#94A3B8" }, // Gray - Structural particle
+            adverb: { cn: "副词(很/也)", uz: "Ravish", color: "#6366f1" }, // Indigo - Adverbs like hěn, yě
+            adjective: { cn: "形容词(补语)", uz: "Sifat (Holat)", color: "#F59E0B" }, // Yellow/Orange - Complement of degree
+            negative: { cn: "否定词(不)", uz: "Inkor (bu)", color: "#DC2626" }, // Dark Red
+            comparison: { cn: "介词(比)", uz: "Solishtirish (bi)", color: "#8B5CF6" } // Purple
+        };
+
+        const LESSONS = [
+            {
+                id: 1,
+                title: { cn: "肯定形式 (Tasdiq shakli)", uz: "\"得\" yordamchisi bilan tasdiq gaplar" },
+                description: { cn: "描述动作进行的程度或状态。", uz: "Harakatning bajarilish darajasini yoki holatini ifodalash." },
+                structures: [
+                    "Ega + Fe'l + 得 + (Ravish) + Sifat",
+                    "Ega + Fe'l + To'ld + Fe'l + 得 + (Ravish) + Sifat"
+                ],
+                examples: [
+                {
+                    structureType: "结构 1: Ega + Fe'l + 得 + Sifat",
+                    chars: ["他", "跑", "得", "快"],
+                    pinyin: ["Tā", "pǎo", "de", "kuài"],
+                    uzbek: ["U tez yuguradi"],
+                    roles: ["subject", "predicate", "particle", "adjective"]
+                },
+                {
+                    structureType: "结构 1: Ega + Fe'l + 得 + Sifat",
+                    chars: ["妹妹", "起", "得", "早"],
+                    pinyin: ["Mèimei", "qǐ", "de", "zǎo"],
+                    uzbek: ["Singlim erta turadi"],
+                    roles: ["subject", "predicate", "particle", "adjective"]
+                },
+                {
+                    structureType: "结构 1 (Ravish bilan): ... 得 + Ravish + Sifat",
+                    chars: ["我", "睡", "得", "也", "早"],
+                    pinyin: ["Wǒ", "shuì", "de", "yě", "zǎo"],
+                    uzbek: ["Men ham erta uxlayman"],
+                    roles: ["subject", "predicate", "particle", "adverb", "adjective"]
+                },
+                {
+                    structureType: "结构 2: Ega + Fe'l + To'ld + Fe'l + 得 + Sifat",
+                    chars: ["他", "学", "汉语", "学", "得", "好"],
+                    pinyin: ["Tā", "xué", "Hànyǔ", "xué", "de", "hǎo"],
+                    uzbek: ["U xitoy tilini yaxshi o'rganadi"],
+                    roles: ["subject", "predicate", "object", "predicate", "particle", "adjective"]
+                },
+                {
+                    structureType: "结构 2 (Ravish bilan): ... 得 + Ravish + Sifat",
+                    chars: ["我", "写", "汉字", "写", "得", "很", "好"],
+                    pinyin: ["Wǒ", "xiě", "Hànzì", "xiě", "de", "hěn", "hǎo"],
+                    uzbek: ["Men xitoy iyerogliflarini juda yaxshi yozaman"],
+                    roles: ["subject", "predicate", "object", "predicate", "particle", "adverb", "adjective"]
+                }
+                ]
+            },
+            {
+                id: 2,
+                title: { cn: "否定形式 (Inkor shakli)", uz: "\"得\" yordamchisi bilan inkor gaplar" },
+                description: { cn: "在形容词前加“不”表示否定。", uz: "Sifat oldiga \"bù\" qo'shib inkor yasaladi." },
+                structures: [
+                    "Ega + Fe'l + 得 + 不 + Sifat",
+                    "Ega + Fe'l + To'ld + Fe'l + 得 + 不 + Sifat"
+                ],
+                examples: [
+                {
+                    structureType: "结构 1: Ega + Fe'l + 得 + 不 + Sifat",
+                    chars: ["他", "跑", "得", "不", "快"],
+                    pinyin: ["Tā", "pǎo", "de", "bú", "kuài"],
+                    uzbek: ["U tez yugurmaydi"],
+                    roles: ["subject", "predicate", "particle", "negative", "adjective"]
+                },
+                {
+                    structureType: "结构 1: Ega + Fe'l + 得 + 不 + Sifat",
+                    chars: ["我", "住", "得", "不", "远"],
+                    pinyin: ["Wǒ", "zhù", "de", "bù", "yuǎn"],
+                    uzbek: ["Men uzoqda yashamayman"],
+                    roles: ["subject", "predicate", "particle", "negative", "adjective"]
+                },
+                {
+                    structureType: "结构 2: Ega + Fe'l + To'ld + Fe'l + 得 + 不 + Sifat",
+                    chars: ["她", "做", "饭", "做", "得", "不", "好"],
+                    pinyin: ["Tā", "zuò", "fàn", "zuò", "de", "bù", "hǎo"],
+                    uzbek: ["U ovqatni yaxshi pishirolmaydi"],
+                    roles: ["subject", "predicate", "object", "predicate", "particle", "negative", "adjective"]
+                },
+                {
+                    structureType: "结构 2: Ega + Fe'l + To'ld + ... + 得 + 不 + Sifat",
+                    chars: ["姐姐", "唱", "歌", "唱", "得", "不", "错"],
+                    pinyin: ["Jiějie", "chàng", "gē", "chàng", "de", "bú", "cuò"],
+                    uzbek: ["Opam qo'shiqni yomon aytmaydi (yaxshi aytadi)"],
+                    roles: ["subject", "predicate", "object", "predicate", "particle", "negative", "adjective"]
+                }
+                ]
+            },
+            {
+                id: 3,
+                title: { cn: "比较结构 (Solishtirish)", uz: "\"比\" va \"得\" ishtirokida solishtirish" },
+                description: { cn: "结合“比”字句和“得”字句进行比较。", uz: "\"Bi\" (qaraganda) va \"De\" yordamchilarini birga ishlatish." },
+                structures: [
+                    "A 比 B + Fe'l + 得 + Sifat",
+                    "A + Fe'l + 得 + 比 B + Sifat"
+                ],
+                examples: [
+                {
+                    structureType: "结构 1: A 比 B + Fe'l + 得 + Sifat",
+                    chars: ["哥哥", "比", "弟弟", "跑", "得", "快"],
+                    pinyin: ["Gēge", "bǐ", "dìdi", "pǎo", "de", "kuài"],
+                    uzbek: ["Aka ukasidan tezroq yuguradi"],
+                    roles: ["subject", "comparison", "object", "predicate", "particle", "adjective"]
+                },
+                {
+                    structureType: "结构 1: A 比 B + Fe'l + 得 + Sifat",
+                    chars: ["我", "妻子", "比", "我", "做", "得", "好"],
+                    pinyin: ["Wǒ qīzi", "bǐ", "wǒ", "zuò", "de", "hǎo"],
+                    uzbek: ["Xotinim mendan yaxshiroq bajaradi"],
+                    roles: ["subject", "comparison", "object", "predicate", "particle", "adjective"]
+                },
+                {
+                    structureType: "结构 2: A + Fe'l + 得 + 比 B + Sifat",
+                    chars: ["他", "跑", "得", "比", "我", "快"],
+                    pinyin: ["Tā", "pǎo", "de", "bǐ", "wǒ", "kuài"],
+                    uzbek: ["U mendan tezroq yuguradi"],
+                    roles: ["subject", "predicate", "particle", "comparison", "object", "adjective"]
+                }
+                ]
+            }
+        ];
+
+        // --- SVG Component ---
+
+        const GrammarTree = ({ example, animate }) => {
+            const width = 850;
+            const height = 350;
+            const startY = 50; 
+            const endY = 220; 
+            
+            const count = example.roles.length;
+            const spacing = width / (count + 1);
+            
+            const nodes = example.roles.map((role, index) => {
+                const x = spacing * (index + 1);
+                const term = GRAMMAR_TERMS[role] || { cn: "未知", uz: "Noma'lum", color: "#ccc" };
+                return {
+                    x,
+                    y: endY,
+                    role: role,
+                    char: example.chars[index],
+                    pinyin: example.pinyin[index],
+                    color: term.color,
+                    cnTerm: term.cn,
+                    uzTerm: term.uz
+                };
+            });
+
+            return (
+                <div className="min-w-[600px] h-full">
+                    <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-full bg-slate-50 rounded-xl border border-slate-200 shadow-inner">
+                        <defs>
+                        <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+                            <polygon points="0 0, 10 3.5, 0 7" fill="#94a3b8" />
+                        </marker>
+                        </defs>
+                        <g transform={`translate(${width / 2}, ${startY})`}>
+                        <circle r="30" fill="#475569" className={animate ? "animate-pulse" : ""} />
+                        <text y="5" textAnchor="middle" fill="white" fontSize="14" fontWeight="bold">Gap</text>
+                        <text y="-40" textAnchor="middle" fill="#64748b" fontSize="14">句子</text>
+                        </g>
+                        {nodes.map((node, i) => (
+                        <g key={i} className="transition-all duration-500 ease-in-out">
+                            <path
+                            d={`M${width / 2} ${startY + 30} C ${width / 2} ${startY + 100}, ${node.x} ${node.y - 100}, ${node.x} ${node.y - 50}`}
+                            fill="none"
+                            stroke={node.color}
+                            strokeWidth="2"
+                            strokeDasharray={animate ? "5,5" : "0"}
+                            opacity="0.6"
+                            className={animate ? "animate-dash" : ""}
+                            />
+                            {/* Increased bubble width to 100 for Uzbek text */}
+                            <g transform={`translate(${node.x}, ${node.y - 70})`}>
+                            <rect x="-50" y="-18" width="100" height="36" rx="18" fill={node.color} className="shadow-sm" />
+                            <text y="4" textAnchor="middle" fill="white" fontSize="11" fontWeight="bold">{node.uzTerm}</text>
+                            <text y="-24" textAnchor="middle" fill={node.color} fontSize="11" fontWeight="bold">{node.cnTerm}</text>
+                            </g>
+                            <g transform={`translate(${node.x}, ${node.y})`}>
+                            <rect x="-40" y="-25" width="80" height="65" rx="8" fill="white" stroke={node.color} strokeWidth="2" className="shadow-sm" />
+                            <text y="5" textAnchor="middle" fontSize="22" fontWeight="bold" fill="#1e293b">{node.char}</text>
+                            <text y="30" textAnchor="middle" fontSize="12" fill="#64748b">{node.pinyin}</text>
+                            </g>
+                        </g>
+                        ))}
+                    </svg>
+                </div>
+            );
+        };
+
+        // --- Main App Component ---
+
+        function ChineseGrammarApp() {
+            const [activeTab, setActiveTab] = useState('learn');
+            const [currentLessonId, setCurrentLessonId] = useState(1);
+            const [currentExampleIndex, setCurrentExampleIndex] = useState(0);
+            const [animateDiagram, setAnimateDiagram] = useState(false);
+
+            // For Practice Mode
+            const [practiceSentence, setPracticeSentence] = useState([]);
+            const [feedback, setFeedback] = useState(null); 
+            
+            const currentLesson = LESSONS.find(l => l.id === currentLessonId);
+            const currentExample = currentLesson.examples[currentExampleIndex];
+
+            useEffect(() => {
+                setAnimateDiagram(true);
+                const timer = setTimeout(() => setAnimateDiagram(false), 1000);
+                return () => clearTimeout(timer);
+            }, [currentExample, currentLessonId]);
+
+            const practiceWords = [
+                { id: 1, char: "他", pinyin: "Tā", role: "subject", color: GRAMMAR_TERMS.subject.color },
+                { id: 2, char: "跑", pinyin: "pǎo", role: "predicate", color: GRAMMAR_TERMS.predicate.color },
+                { id: 3, char: "得", pinyin: "de", role: "particle", color: GRAMMAR_TERMS.particle.color },
+                { id: 4, char: "快", pinyin: "kuài", role: "adjective", color: GRAMMAR_TERMS.adjective.color },
+                { id: 5, char: "不", pinyin: "bù", role: "negative", color: GRAMMAR_TERMS.negative.color },
+                { id: 6, char: "比", pinyin: "bǐ", role: "comparison", color: GRAMMAR_TERMS.comparison.color },
+                { id: 7, char: "我", pinyin: "wǒ", role: "object", color: GRAMMAR_TERMS.object.color }, 
+                { id: 8, char: "很", pinyin: "hěn", role: "adverb", color: GRAMMAR_TERMS.adverb.color },
+                { id: 9, char: "说", pinyin: "shuō", role: "predicate", color: GRAMMAR_TERMS.predicate.color },
+                { id: 10, char: "做", pinyin: "zuò", role: "predicate", color: GRAMMAR_TERMS.predicate.color },
+                { id: 11, char: "学", pinyin: "xué", role: "predicate", color: GRAMMAR_TERMS.predicate.color },
+                { id: 12, char: "好", pinyin: "hǎo", role: "adjective", color: GRAMMAR_TERMS.adjective.color },
+                { id: 13, char: "慢", pinyin: "màn", role: "adjective", color: GRAMMAR_TERMS.adjective.color },
+                { id: 14, char: "早", pinyin: "zǎo", role: "adjective", color: GRAMMAR_TERMS.adjective.color },
+            ];
+
+            const addToPractice = (word) => {
+                const newWord = { ...word, uniqueId: Date.now() + Math.random() }; 
+                setPracticeSentence([...practiceSentence, newWord]);
+                setFeedback(null);
+            };
+
+            const removeFromPractice = (uniqueId) => {
+                setPracticeSentence(practiceSentence.filter(w => w.uniqueId !== uniqueId));
+                setFeedback(null);
+            };
+
+            const clearPractice = () => {
+                setPracticeSentence([]);
+                setFeedback(null);
+            };
+
+            const checkSentence = () => {
+                if (practiceSentence.length === 0) {
+                setFeedback({ type: 'error', msgCn: '请先选择词语', msgUz: "Iltimos so'zlarni tanlang" });
+                return;
+                }
+
+                const deIndex = practiceSentence.findIndex(w => w.char === '得');
+
+                if (deIndex === -1) {
+                setFeedback({ type: 'error', msgCn: '句子必须包含“得”字', msgUz: "Gapda \"de\" qatnashishi shart" });
+                return;
+                }
+
+                if (deIndex === 0) {
+                setFeedback({ type: 'error', msgCn: '“得”字不能在开头', msgUz: "\"De\" gap boshida kelmaydi" });
+                return;
+                }
+                if (deIndex === practiceSentence.length - 1) {
+                setFeedback({ type: 'error', msgCn: '句子未完成', msgUz: "Gap tugallanmagan" });
+                return;
+                }
+
+                const beforeWord = practiceSentence[deIndex - 1];
+                if (beforeWord.role !== 'predicate') {
+                setFeedback({ 
+                    type: 'error', 
+                    msgCn: `“得”字前面应该是动词，而不是“${beforeWord.char}”`, 
+                    msgUz: `"De" dan oldin fe'l kelishi kerak ("${beforeWord.char}" emas)` 
+                });
+                return;
+                }
+
+                const afterWord = practiceSentence[deIndex + 1];
+                const validAfterRoles = ['adjective', 'adverb', 'negative', 'comparison'];
+                
+                if (!validAfterRoles.includes(afterWord.role)) {
+                setFeedback({ 
+                    type: 'error', 
+                    msgCn: `“得”字后面通常接形容词、否定词或比较词`, 
+                    msgUz: `"De" dan keyin sifat, inkor yoki solishtirish so'zi kelishi kerak` 
+                });
+                return;
+                }
+
+                setFeedback({ type: 'success', msgCn: '做得好！句子结构正确。', msgUz: "Barakalla! Gap tuzilishi to'g'ri." });
+            };
+
+            return (
+                <div className="min-h-screen bg-slate-50 font-sans text-slate-800 pb-8">
+                {/* Mobile-optimized Header */}
+                <header className="bg-blue-600 text-white p-3 sm:p-4 shadow-lg sticky top-0 z-10">
+                    <div className="max-w-5xl mx-auto flex flex-col sm:flex-row justify-between items-center gap-3 sm:gap-0">
+                    <div className="text-center sm:text-left w-full sm:w-auto">
+                        <h1 className="text-lg sm:text-2xl font-bold flex items-center justify-center sm:justify-start gap-2">
+                        <BookOpen size={20} className="sm:w-6 sm:h-6 flex-shrink-0" />
+                        <span className="truncate">Xitoy tili grammatikasi: "得" yordamchisi</span>
+                        </h1>
+                        <p className="text-blue-100 text-xs sm:text-sm truncate">Dilfuza Kāng lǎo shī bilan xitoy tilini o'rganmiz</p>
+                    </div>
+                    <div className="flex gap-2 w-full sm:w-auto">
+                        <button 
+                        onClick={() => setActiveTab('learn')}
+                        className={`flex-1 sm:flex-none px-3 py-1.5 sm:px-4 sm:py-2 rounded-lg font-medium text-sm sm:text-base transition text-center ${activeTab === 'learn' ? 'bg-white text-blue-600 shadow' : 'bg-blue-700 text-white hover:bg-blue-600'}`}
+                        >
+                        学习 (O'rganish)
+                        </button>
+                        <button 
+                        onClick={() => { setActiveTab('practice'); setFeedback(null); }}
+                        className={`flex-1 sm:flex-none px-3 py-1.5 sm:px-4 sm:py-2 rounded-lg font-medium text-sm sm:text-base transition text-center ${activeTab === 'practice' ? 'bg-white text-blue-600 shadow' : 'bg-blue-700 text-white hover:bg-blue-600'}`}
+                        >
+                        练习 (Mashq)
+                        </button>
+                    </div>
+                    </div>
+                </header>
+
+                <main className="max-w-5xl mx-auto p-3 sm:p-4">
+                    
+                    {activeTab === 'learn' && (
+                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6">
+                        
+                        {/* Sidebar */}
+                        <div className="lg:col-span-1 space-y-3 lg:sticky lg:top-24 h-fit">
+                        <h2 className="text-base sm:text-lg font-semibold text-slate-700 mb-2 flex items-center gap-2">
+                            <Layout size={18} /> 课程列表 (Mavzular)
+                        </h2>
+                        <div className="flex flex-col gap-2">
+                            {LESSONS.map(lesson => (
+                            <button
+                                key={lesson.id}
+                                onClick={() => {
+                                setCurrentLessonId(lesson.id);
+                                setCurrentExampleIndex(0);
+                                }}
+                                className={`w-full text-left p-3 sm:p-4 rounded-xl border transition-all duration-200 group ${
+                                currentLessonId === lesson.id 
+                                    ? 'bg-blue-600 border-blue-600 text-white shadow-md transform scale-[1.01]' 
+                                    : 'bg-white border-slate-200 hover:border-blue-300 hover:bg-blue-50 text-slate-700'
+                                }`}
+                            >
+                                <div className={`font-bold text-base sm:text-lg mb-1 ${currentLessonId === lesson.id ? 'text-white' : 'text-slate-800'}`}>
+                                {lesson.title.cn}
+                                </div>
+                                <div className={`text-xs sm:text-sm ${currentLessonId === lesson.id ? 'text-blue-100' : 'text-slate-500'}`}>
+                                {lesson.title.uz}
+                                </div>
+                            </button>
+                            ))}
+                        </div>
+                        
+                        <div className="bg-indigo-50 border border-indigo-100 p-3 sm:p-4 rounded-xl mt-4">
+                            <h3 className="font-bold text-indigo-800 text-xs sm:text-sm mb-2 flex items-center gap-2">
+                            <GitMerge size={14}/> 本课结构 (Qurilish)
+                            </h3>
+                            <ul className="text-[10px] sm:text-xs space-y-2 text-indigo-700 font-mono font-semibold">
+                            {currentLesson.structures.map((s, i) => (
+                                <li key={i} className="flex items-start gap-2">
+                                <span className="bg-indigo-200 text-indigo-800 px-1.5 rounded min-w-[1.2em] text-center flex-shrink-0">{i + 1}</span>
+                                <span className="break-words">{s}</span>
+                                </li>
+                            ))}
+                            </ul>
+                        </div>
+                        </div>
+
+                        <div className="lg:col-span-2 space-y-4 sm:space-y-6">
+                        <div className="bg-white p-4 sm:p-6 rounded-2xl shadow-sm border border-slate-200">
+                            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 sm:mb-6 border-b border-slate-100 pb-4 gap-2">
+                            <div>
+                                <span className="inline-block px-2 py-1 bg-blue-100 text-blue-700 rounded-full text-[10px] sm:text-xs font-bold mb-1 sm:mb-2">Lesson {currentLesson.id}</span>
+                                <h2 className="text-xl sm:text-2xl font-bold text-slate-800">{currentLesson.title.cn}</h2>
+                                <h3 className="text-sm sm:text-lg text-slate-500">{currentLesson.title.uz}</h3>
+                            </div>
+                            </div>
+
+                            <div className="flex flex-wrap justify-between items-center mb-4 gap-2">
+                            <span className="text-[10px] sm:text-xs font-bold text-slate-400 uppercase tracking-wider bg-slate-100 px-2 py-1 rounded truncate max-w-[60%]">
+                                {currentExample.structureType}
+                            </span>
+                            <button 
+                                onClick={() => setCurrentExampleIndex(prev => (prev + 1) % currentLesson.examples.length)}
+                                className="flex items-center gap-2 px-3 py-1.5 bg-blue-50 text-blue-600 hover:bg-blue-100 rounded-lg font-medium text-xs sm:text-sm transition ml-auto"
+                            >
+                                <RefreshCw size={14} /> <span className="hidden sm:inline">下一个例子</span> (Keyingi)
+                            </button>
+                            </div>
+                            
+                            {/* Scrollable Container for Mobile SVG */}
+                            <div className="w-full aspect-[4/3] sm:aspect-[2/1] bg-gradient-to-br from-slate-50 to-slate-100 rounded-2xl border border-slate-200 overflow-hidden relative shadow-inner overflow-x-auto touch-pan-x">
+                            <GrammarTree example={currentExample} animate={animateDiagram} />
+                            <div className="absolute bottom-2 right-2 text-[10px] text-slate-400 sm:hidden pointer-events-none bg-white/50 px-2 rounded">↔ Surish (Scroll)</div>
+                            </div>
+
+                            <div className="mt-4 sm:mt-6 text-center">
+                            <p className="text-xl sm:text-2xl font-bold text-slate-800 tracking-wide mb-1">{currentExample.chars.join(" ")}</p>
+                            <p className="text-base sm:text-lg text-blue-600 font-medium">{currentExample.uzbek}</p>
+                            </div>
+
+                            <div className="mt-6 sm:mt-8 flex flex-wrap gap-2 justify-center text-[10px] sm:text-xs">
+                            {Object.entries(GRAMMAR_TERMS).map(([key, val]) => (
+                                <div key={key} className="flex items-center gap-1.5 px-2 py-1 sm:px-3 sm:py-1.5 rounded-full border border-slate-100 bg-white shadow-sm">
+                                <div className="w-2 h-2 sm:w-3 sm:h-3 rounded-full" style={{backgroundColor: val.color}}></div>
+                                <span className="text-slate-600 font-medium">{val.cn}</span>
+                                <span className="text-slate-400 border-l pl-1.5 ml-0.5">{val.uz}</span>
+                                </div>
+                            ))}
+                            </div>
+                        </div>
+                        </div>
+                    </div>
+                    )}
+
+                    {activeTab === 'practice' && (
+                    <div className="max-w-2xl mx-auto space-y-6 sm:space-y-8">
+                        <div className="bg-white p-4 sm:p-8 rounded-2xl shadow-lg border border-slate-200 text-center relative overflow-hidden">
+                            <h2 className="text-lg sm:text-2xl font-bold mb-2">构造句子 (Gap tuzish)</h2>
+                            <p className="text-sm sm:text-base text-slate-500 mb-6 sm:mb-8">尝试造句：<br/><strong>他跑得不快</strong> (Tasdiq, Inkor yoki Solishtirish)</p>
+                            
+                            {/* Mobile-friendly construction area */}
+                            <div className="min-h-[100px] sm:min-h-[140px] bg-slate-50 border-2 border-dashed border-slate-300 rounded-2xl flex flex-wrap items-center justify-center gap-2 sm:gap-3 p-3 sm:p-6 mb-6 sm:mb-8 transition-colors hover:border-blue-300">
+                            {practiceSentence.length === 0 ? (
+                                <div className="text-slate-400 flex flex-col items-center gap-2">
+                                <MousePointer2 size={24} className="opacity-50 sm:w-8 sm:h-8" />
+                                <span className="text-xs sm:text-base">点击下方词语开始造句<br/>(So'zlarni tanlang)</span>
+                                </div>
+                            ) : (
+                                practiceSentence.map((word, idx) => (
+                                <button 
+                                    key={word.uniqueId} 
+                                    onClick={() => removeFromPractice(word.uniqueId)}
+                                    className="animate-in fade-in zoom-in duration-200 active:scale-95 transition-transform"
+                                >
+                                    <div 
+                                    className="px-3 py-2 sm:px-4 sm:py-3 rounded-lg sm:rounded-xl shadow-md border-b-4 text-white font-bold text-base sm:text-xl flex flex-col items-center min-w-[50px] sm:min-w-[70px]"
+                                    style={{backgroundColor: word.color, borderColor: 'rgba(0,0,0,0.2)'}}
+                                    >
+                                    {word.char}
+                                    <span className="text-[8px] sm:text-[10px] opacity-90 font-normal uppercase tracking-wider mt-0.5">{word.role}</span>
+                                    </div>
+                                </button>
+                                ))
+                            )}
+                            </div>
+
+                            <div className="flex justify-center gap-3 sm:gap-4 mb-6 sm:mb-8">
+                            <button 
+                                onClick={clearPractice}
+                                className="px-4 py-2 sm:px-6 sm:py-2.5 text-slate-500 bg-slate-50 hover:bg-slate-100 rounded-xl transition font-medium text-sm sm:text-base"
+                            >
+                                清除 (Tozalash)
+                            </button>
+                            <button 
+                                className="px-5 py-2 sm:px-8 sm:py-2.5 bg-green-500 hover:bg-green-600 text-white rounded-xl font-bold shadow-lg shadow-green-200 transition flex items-center gap-2 transform active:scale-95 text-sm sm:text-base"
+                                onClick={checkSentence}
+                            >
+                                <CheckCircle size={18} className="sm:w-5 sm:h-5" /> 检查 (Tekshirish)
+                            </button>
+                            </div>
+
+                            {/* Feedback Display Area */}
+                            {feedback && (
+                            <div className={`mb-6 sm:mb-8 p-3 sm:p-4 rounded-xl flex items-start gap-3 sm:gap-4 text-left animate-in fade-in slide-in-from-top-2 ${
+                                feedback.type === 'success' ? 'bg-green-50 border border-green-200' : 'bg-red-50 border border-red-200'
+                            }`}>
+                                <div className={`mt-1 p-1.5 sm:p-2 rounded-full ${feedback.type === 'success' ? 'bg-green-100 text-green-600' : 'bg-red-100 text-red-600'}`}>
+                                {feedback.type === 'success' ? <CheckCircle size={20} className="sm:w-6 sm:h-6" /> : <XCircle size={20} className="sm:w-6 sm:h-6" />}
+                                </div>
+                                <div>
+                                <h4 className={`font-bold text-sm sm:text-lg ${feedback.type === 'success' ? 'text-green-800' : 'text-red-800'}`}>
+                                    {feedback.msgCn}
+                                </h4>
+                                <p className={`text-xs sm:text-base ${feedback.type === 'success' ? 'text-green-600' : 'text-red-600'}`}>
+                                    {feedback.msgUz}
+                                </p>
+                                </div>
+                            </div>
+                            )}
+
+                            <div className="border-t border-slate-100 pt-6 sm:pt-8">
+                            <h3 className="text-xs sm:text-sm font-bold text-slate-400 uppercase mb-3 sm:mb-4 tracking-widest text-left">词库 (So'z banki)</h3>
+                            {/* Mobile optimized grid for words */}
+                            <div className="grid grid-cols-4 sm:flex sm:flex-wrap gap-2 sm:gap-3 justify-center">
+                                {practiceWords.map(word => (
+                                <button
+                                    key={word.id}
+                                    onClick={() => addToPractice(word)}
+                                    className="group relative px-2 py-2 sm:px-5 sm:py-3 bg-white border border-slate-200 rounded-lg sm:rounded-xl shadow-sm hover:shadow-md hover:border-blue-400 active:bg-blue-50 transition text-center sm:text-left min-w-0 sm:min-w-[90px]"
+                                >
+                                    {/* Dot only visible on larger screens or positioned differently */}
+                                    <div className="hidden sm:flex justify-between items-start mb-1">
+                                        <div className="w-2 h-2 rounded-full" style={{backgroundColor: word.color}}></div>
+                                    </div>
+                                    <div className="font-bold text-slate-800 text-lg sm:text-2xl group-hover:text-blue-600">{word.char}</div>
+                                    <div className="text-[10px] sm:text-xs text-slate-400 mt-0.5 sm:mt-1 truncate">{word.pinyin}</div>
+                                    {/* Mobile dot indicator */}
+                                    <div className="sm:hidden w-1.5 h-1.5 rounded-full absolute top-1 right-1" style={{backgroundColor: word.color}}></div>
+                                </button>
+                                ))}
+                            </div>
+                            </div>
+                        </div>
+                    </div>
+                    )}
+                </main>
+                </div>
+            );
+        }
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<ChineseGrammarApp />);
+    </script>
+</body>
+</html>
